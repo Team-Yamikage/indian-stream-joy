@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { ChannelWithStream } from "@/types/channel";
-import { Play, Globe, Heart } from "lucide-react";
+import { Play, Globe, Heart, Info } from "lucide-react";
 import channelThumbnail from "@/assets/channel-thumbnail.png";
 
 interface ChannelCardProps {
@@ -9,9 +9,10 @@ interface ChannelCardProps {
   onPlay: (channel: ChannelWithStream) => void;
   isFavorite?: boolean;
   onToggleFavorite?: (channelId: string) => void;
+  onViewDetails?: (channelId: string) => void;
 }
 
-export function ChannelCard({ channel, index, onPlay, isFavorite = false, onToggleFavorite }: ChannelCardProps) {
+export function ChannelCard({ channel, index, onPlay, isFavorite = false, onToggleFavorite, onViewDetails }: ChannelCardProps) {
   const categoryColors: Record<string, string> = {
     news: "bg-red-500/20 text-red-400",
     entertainment: "bg-purple-500/20 text-purple-400",
@@ -28,6 +29,11 @@ export function ChannelCard({ channel, index, onPlay, isFavorite = false, onTogg
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onToggleFavorite?.(channel.id);
+  };
+
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onViewDetails?.(channel.id);
   };
 
   return (
@@ -62,17 +68,27 @@ export function ChannelCard({ channel, index, onPlay, isFavorite = false, onTogg
           </div>
         )}
 
-        {/* Favorite button */}
-        <button
-          onClick={handleFavoriteClick}
-          className={`absolute top-2 left-2 p-1.5 rounded-full transition-all duration-300 ${
-            isFavorite 
-              ? "bg-red-500 text-white" 
-              : "bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-red-500"
-          }`}
-        >
-          <Heart className="w-4 h-4" fill={isFavorite ? "currentColor" : "none"} />
-        </button>
+        {/* Top left buttons */}
+        <div className="absolute top-2 left-2 flex items-center gap-1">
+          <button
+            onClick={handleFavoriteClick}
+            className={`p-1.5 rounded-full transition-all duration-300 ${
+              isFavorite 
+                ? "bg-red-500 text-white" 
+                : "bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-red-500"
+            }`}
+          >
+            <Heart className="w-4 h-4" fill={isFavorite ? "currentColor" : "none"} />
+          </button>
+          {onViewDetails && (
+            <button
+              onClick={handleInfoClick}
+              className="p-1.5 rounded-full bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-primary transition-all duration-300"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Card Content */}

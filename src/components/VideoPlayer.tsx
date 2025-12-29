@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, PictureInPicture2, X } from "lucide-react";
 
 interface VideoPlayerProps {
   url: string;
@@ -13,6 +13,15 @@ export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
   const hlsRef = useRef<Hls | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPiPSupported, setIsPiPSupported] = useState(false);
+  const [isPiPActive, setIsPiPActive] = useState(false);
+
+  useEffect(() => {
+    // Check PiP support
+    setIsPiPSupported(
+      "pictureInPictureEnabled" in document && document.pictureInPictureEnabled
+    );
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -68,13 +77,37 @@ export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
       setLoading(false);
     }
 
+    // PiP event listeners
+    const handleEnterPiP = () => setIsPiPActive(true);
+    const handleLeavePiP = () => setIsPiPActive(false);
+
+    video.addEventListener("enterpictureinpicture", handleEnterPiP);
+    video.addEventListener("leavepictureinpicture", handleLeavePiP);
+
     return () => {
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      video.removeEventListener("enterpictureinpicture", handleEnterPiP);
+      video.removeEventListener("leavepictureinpicture", handleLeavePiP);
     };
   }, [url]);
+
+  const togglePiP = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.error("PiP error:", err);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-deep/95 backdrop-blur-md">
@@ -83,24 +116,27 @@ export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border">
             <h3 className="text-lg font-semibold text-foreground">{title}</h3>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg bg-secondary hover:bg-muted transition-colors"
-            >
-              <svg
-                className="w-5 h-5 text-foreground"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex items-center gap-2">
+              {isPiPSupported && (
+                <button
+                  onClick={togglePiP}
+                  className={`p-2 rounded-lg transition-colors ${
+                    isPiPActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary hover:bg-muted text-foreground"
+                  }`}
+                  title="Picture-in-Picture"
+                >
+                  <PictureInPicture2 className="w-5 h-5" />
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg bg-secondary hover:bg-muted transition-colors"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+                <X className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
           </div>
           {/* Video */}
           <div className="relative aspect-video bg-navy-deep">
