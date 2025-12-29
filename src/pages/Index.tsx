@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Helmet } from "react-helmet-async";
@@ -17,13 +17,17 @@ import {
   searchChannels,
 } from "@/lib/api";
 import { ChannelWithStream } from "@/types/channel";
-import { Tv, AlertCircle } from "lucide-react";
+import { useFavorites } from "@/hooks/useFavorites";
+import { Tv, AlertCircle, Heart } from "lucide-react";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<ChannelWithStream | null>(null);
   const channelsRef = useRef<HTMLDivElement>(null);
+  
+  const { favorites, toggleFavorite, isFavorite } = useFavorites();
 
   const {
     data: channels = [],
@@ -41,8 +45,14 @@ const Index = () => {
     staleTime: 10 * 60 * 1000,
   });
 
-  const filteredChannels = useCallback(() => {
+  const filteredChannels = useMemo(() => {
     let result = channels;
+    
+    // Filter favorites
+    if (showFavoritesOnly) {
+      result = result.filter((channel) => favorites.includes(channel.id));
+    }
+    
     if (activeCategory !== "all") {
       result = getChannelsByCategory(result, activeCategory);
     }
@@ -50,7 +60,7 @@ const Index = () => {
       result = searchChannels(result, searchQuery);
     }
     return result;
-  }, [channels, activeCategory, searchQuery]);
+  }, [channels, activeCategory, searchQuery, showFavoritesOnly, favorites]);
 
   const handleExplore = () => {
     channelsRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -74,8 +84,6 @@ const Index = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedChannel]);
-
-  const displayedChannels = filteredChannels();
 
   return (
     <>
@@ -119,7 +127,27 @@ const Index = () => {
 
               {/* Search and Filter */}
               <div className="flex flex-col lg:flex-row gap-4 items-center justify-between mb-8">
-                <SearchBar value={searchQuery} onChange={setSearchQuery} />
+                <div className="flex items-center gap-3 w-full lg:w-auto">
+                  <SearchBar value={searchQuery} onChange={setSearchQuery} />
+                  <button
+                    onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap ${
+                      showFavoritesOnly
+                        ? "bg-red-500 border-red-500 text-white"
+                        : "border-border bg-card/50 text-muted-foreground hover:border-red-500 hover:text-red-500"
+                    }`}
+                  >
+                    <Heart className="w-4 h-4" fill={showFavoritesOnly ? "currentColor" : "none"} />
+                    <span className="hidden sm:inline">Watchlist</span>
+                    {favorites.length > 0 && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                        showFavoritesOnly ? "bg-white/20" : "bg-red-500/20 text-red-400"
+                      }`}>
+                        {favorites.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
                 <CategoryFilter
                   categories={categories}
                   activeCategory={activeCategory}
@@ -131,7 +159,7 @@ const Index = () => {
               <div className="flex items-center gap-2 mb-6">
                 <Tv className="w-5 h-5 text-primary" />
                 <span className="text-muted-foreground">
-                  {displayedChannels.length} channel{displayedChannels.length !== 1 ? "s" : ""} available
+                  {filteredChannels.length} channel{filteredChannels.length !== 1 ? "s" : ""} available
                 </span>
               </div>
 
@@ -152,31 +180,47 @@ const Index = () => {
               )}
 
               {/* Empty State */}
-              {!channelsLoading && !channelsError && displayedChannels.length === 0 && (
+              {!channelsLoading && !channelsError && filteredChannels.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <Tv className="w-12 h-12 text-muted-foreground mb-4" />
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    No channels found
-                  </h3>
-                  <p className="text-muted-foreground">
-                    Try adjusting your search or filter criteria.
-                  </p>
+                  {showFavoritesOnly ? (
+                    <>
+                      <Heart className="w-12 h-12 text-muted-foreground mb-4" />
+                      <h3 className="text-xl font-semibold text-foreground mb-2">
+                        No favorites yet
+                      </h3>
+                      <p className="text-muted-foreground">
+                        Click the heart icon on any channel to add it to your watchlist.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Tv className="w-12 h-12 text-muted-foreground mb-4" />
+                      <h3 className="text-xl font-semibold text-foreground mb-2">
+                        No channels found
+                      </h3>
+                      <p className="text-muted-foreground">
+                        Try adjusting your search or filter criteria.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
               {/* Channels Grid */}
-              {!channelsLoading && !channelsError && displayedChannels.length > 0 && (
+              {!channelsLoading && !channelsError && filteredChannels.length > 0 && (
                 <motion.div
                   layout
                   className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
                 >
                   <AnimatePresence mode="popLayout">
-                    {displayedChannels.map((channel, index) => (
+                    {filteredChannels.map((channel, index) => (
                       <ChannelCard
                         key={channel.id}
                         channel={channel}
                         index={index}
                         onPlay={handlePlayChannel}
+                        isFavorite={isFavorite(channel.id)}
+                        onToggleFavorite={toggleFavorite}
                       />
                     ))}
                   </AnimatePresence>
