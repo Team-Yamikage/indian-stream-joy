@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Helmet } from "react-helmet-async";
 import { Header } from "@/components/Header";
@@ -18,16 +19,21 @@ import {
 } from "@/lib/api";
 import { ChannelWithStream } from "@/types/channel";
 import { useFavorites } from "@/hooks/useFavorites";
-import { Tv, AlertCircle, Heart } from "lucide-react";
+import { useWatchHistory } from "@/hooks/useWatchHistory";
+import { Tv, AlertCircle, Heart, History, Trash2 } from "lucide-react";
 
 const Index = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [showHistoryOnly, setShowHistoryOnly] = useState(searchParams.get("history") === "true");
   const [selectedChannel, setSelectedChannel] = useState<ChannelWithStream | null>(null);
   const channelsRef = useRef<HTMLDivElement>(null);
   
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const { history, addToHistory, clearHistory, getRecentChannelIds } = useWatchHistory();
 
   const {
     data: channels = [],
@@ -45,11 +51,19 @@ const Index = () => {
     staleTime: 10 * 60 * 1000,
   });
 
+  const recentChannelIds = getRecentChannelIds();
+
   const filteredChannels = useMemo(() => {
     let result = channels;
     
+    // Filter by watch history
+    if (showHistoryOnly) {
+      result = recentChannelIds
+        .map((id) => channels.find((c) => c.id === id))
+        .filter((c): c is ChannelWithStream => c !== undefined);
+    }
     // Filter favorites
-    if (showFavoritesOnly) {
+    else if (showFavoritesOnly) {
       result = result.filter((channel) => favorites.includes(channel.id));
     }
     
@@ -60,18 +74,23 @@ const Index = () => {
       result = searchChannels(result, searchQuery);
     }
     return result;
-  }, [channels, activeCategory, searchQuery, showFavoritesOnly, favorites]);
+  }, [channels, activeCategory, searchQuery, showFavoritesOnly, showHistoryOnly, favorites, recentChannelIds]);
 
   const handleExplore = () => {
     channelsRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const handlePlayChannel = (channel: ChannelWithStream) => {
+    addToHistory(channel.id);
     setSelectedChannel(channel);
   };
 
   const handleClosePlayer = () => {
     setSelectedChannel(null);
+  };
+
+  const handleViewDetails = (channelId: string) => {
+    navigate(`/channel/${channelId}`);
   };
 
   // Escape key to close player
@@ -118,19 +137,32 @@ const Index = () => {
                 className="text-center mb-12"
               >
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                  Browse <span className="text-gradient-saffron">Channels</span>
+                  {showHistoryOnly ? (
+                    <>Watch <span className="text-gradient-saffron">History</span></>
+                  ) : showFavoritesOnly ? (
+                    <>My <span className="text-gradient-saffron">Watchlist</span></>
+                  ) : (
+                    <>Browse <span className="text-gradient-saffron">Channels</span></>
+                  )}
                 </h2>
                 <p className="text-muted-foreground max-w-lg mx-auto">
-                  Discover and watch your favorite Indian TV channels. Filter by category or search for specific channels.
+                  {showHistoryOnly
+                    ? "Your recently watched channels."
+                    : showFavoritesOnly
+                    ? "Your saved favorite channels."
+                    : "Discover and watch your favorite Indian TV channels. Filter by category or search for specific channels."}
                 </p>
               </motion.div>
 
               {/* Search and Filter */}
               <div className="flex flex-col lg:flex-row gap-4 items-center justify-between mb-8">
-                <div className="flex items-center gap-3 w-full lg:w-auto">
+                <div className="flex items-center gap-3 w-full lg:w-auto flex-wrap">
                   <SearchBar value={searchQuery} onChange={setSearchQuery} />
                   <button
-                    onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                    onClick={() => {
+                      setShowFavoritesOnly(!showFavoritesOnly);
+                      setShowHistoryOnly(false);
+                    }}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap ${
                       showFavoritesOnly
                         ? "bg-red-500 border-red-500 text-white"
@@ -147,6 +179,27 @@ const Index = () => {
                       </span>
                     )}
                   </button>
+                  <button
+                    onClick={() => {
+                      setShowHistoryOnly(!showHistoryOnly);
+                      setShowFavoritesOnly(false);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap ${
+                      showHistoryOnly
+                        ? "bg-primary border-primary text-primary-foreground"
+                        : "border-border bg-card/50 text-muted-foreground hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    <History className="w-4 h-4" />
+                    <span className="hidden sm:inline">History</span>
+                    {history.length > 0 && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                        showHistoryOnly ? "bg-white/20" : "bg-primary/20 text-primary"
+                      }`}>
+                        {history.length}
+                      </span>
+                    )}
+                  </button>
                 </div>
                 <CategoryFilter
                   categories={categories}
@@ -156,11 +209,22 @@ const Index = () => {
               </div>
 
               {/* Results count */}
-              <div className="flex items-center gap-2 mb-6">
-                <Tv className="w-5 h-5 text-primary" />
-                <span className="text-muted-foreground">
-                  {filteredChannels.length} channel{filteredChannels.length !== 1 ? "s" : ""} available
-                </span>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <Tv className="w-5 h-5 text-primary" />
+                  <span className="text-muted-foreground">
+                    {filteredChannels.length} channel{filteredChannels.length !== 1 ? "s" : ""} available
+                  </span>
+                </div>
+                {showHistoryOnly && history.length > 0 && (
+                  <button
+                    onClick={clearHistory}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear History
+                  </button>
+                )}
               </div>
 
               {/* Loading State */}
@@ -182,7 +246,17 @@ const Index = () => {
               {/* Empty State */}
               {!channelsLoading && !channelsError && filteredChannels.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                  {showFavoritesOnly ? (
+                  {showHistoryOnly ? (
+                    <>
+                      <History className="w-12 h-12 text-muted-foreground mb-4" />
+                      <h3 className="text-xl font-semibold text-foreground mb-2">
+                        No watch history
+                      </h3>
+                      <p className="text-muted-foreground">
+                        Start watching channels to build your history.
+                      </p>
+                    </>
+                  ) : showFavoritesOnly ? (
                     <>
                       <Heart className="w-12 h-12 text-muted-foreground mb-4" />
                       <h3 className="text-xl font-semibold text-foreground mb-2">
@@ -221,6 +295,7 @@ const Index = () => {
                         onPlay={handlePlayChannel}
                         isFavorite={isFavorite(channel.id)}
                         onToggleFavorite={toggleFavorite}
+                        onViewDetails={handleViewDetails}
                       />
                     ))}
                   </AnimatePresence>
