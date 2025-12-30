@@ -7,6 +7,12 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ value, onChange }: SearchBarProps) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      onChange("");
+    }
+  };
+
   return (
     <div className="relative w-full max-w-md">
       <div className="glass rounded-full overflow-hidden flex items-center px-4 py-2 focus-within:ring-2 focus-within:ring-primary/50 transition-all">
@@ -16,7 +22,10 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
           placeholder="Search channels..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          tabIndex={0}
           className="flex-1 bg-transparent border-none outline-none px-3 py-1 text-foreground placeholder:text-muted-foreground"
+          aria-label="Search channels"
         />
         <AnimatePresence>
           {value && (
@@ -25,7 +34,9 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={() => onChange("")}
-              className="p-1 rounded-full hover:bg-muted transition-colors"
+              tabIndex={0}
+              className="p-1 rounded-full hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Clear search"
             >
               <X className="w-4 h-4 text-muted-foreground" />
             </motion.button>
