@@ -97,6 +97,20 @@
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground));
   }
+
+  /* TV/Remote focus styles - high visibility */
+  *:focus-visible {
+    outline: 3px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  /* For TV browsers that may not support focus-visible */
+  @supports not selector(:focus-visible) {
+    *:focus {
+      outline: 3px solid hsl(var(--primary));
+      outline-offset: 2px;
+    }
+  }
 }
 
 @layer utilities {
