@@ -26,36 +26,49 @@ export function ChannelCard({ channel, index, onPlay, isFavorite = false, onTogg
     documentary: "bg-teal-500/20 text-teal-400",
   };
 
-  const handleFavoriteClick = (e: React.MouseEvent) => {
+  const handleFavoriteClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     onToggleFavorite?.(channel.id);
   };
 
-  const handleInfoClick = (e: React.MouseEvent) => {
+  const handleInfoClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     onViewDetails?.(channel.id);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onPlay(channel);
+    }
   };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.03, duration: 0.4 }}
+      transition={{ delay: Math.min(index * 0.02, 0.5), duration: 0.3 }}
       whileHover={{ y: -4, scale: 1.02 }}
-      className="group glass-card rounded-xl overflow-hidden cursor-pointer"
+      whileFocus={{ y: -4, scale: 1.02 }}
+      className="group glass-card rounded-xl overflow-hidden cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
       onClick={() => onPlay(channel)}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`Play ${channel.name}`}
     >
       {/* Card Header with thumbnail */}
       <div className="relative h-28 bg-gradient-to-br from-secondary to-navy-light overflow-hidden">
         <img 
           src={channelThumbnail} 
           alt={channel.name}
-          className="w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-110 transition-all duration-300"
+          loading="lazy"
+          className="w-full h-full object-cover opacity-60 group-hover:opacity-80 group-focus:opacity-80 group-hover:scale-110 group-focus:scale-110 transition-all duration-300"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent opacity-80" />
         
         {/* Play button overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity duration-300">
           <div className="w-14 h-14 rounded-full bg-primary/90 flex items-center justify-center glow-saffron">
             <Play className="w-6 h-6 text-primary-foreground ml-1" fill="currentColor" />
           </div>
@@ -72,18 +85,24 @@ export function ChannelCard({ channel, index, onPlay, isFavorite = false, onTogg
         <div className="absolute top-2 left-2 flex items-center gap-1">
           <button
             onClick={handleFavoriteClick}
-            className={`p-1.5 rounded-full transition-all duration-300 ${
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleFavoriteClick(e); }}
+            tabIndex={0}
+            className={`p-1.5 rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${
               isFavorite 
                 ? "bg-red-500 text-white" 
-                : "bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-red-500"
+                : "bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-red-500 focus:bg-background/80"
             }`}
+            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
           >
             <Heart className="w-4 h-4" fill={isFavorite ? "currentColor" : "none"} />
           </button>
           {onViewDetails && (
             <button
               onClick={handleInfoClick}
-              className="p-1.5 rounded-full bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-primary transition-all duration-300"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleInfoClick(e); }}
+              tabIndex={0}
+              className="p-1.5 rounded-full bg-background/50 text-muted-foreground hover:bg-background/80 hover:text-primary focus:bg-background/80 focus:text-primary transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="View channel details"
             >
               <Info className="w-4 h-4" />
             </button>
@@ -93,7 +112,7 @@ export function ChannelCard({ channel, index, onPlay, isFavorite = false, onTogg
 
       {/* Card Content */}
       <div className="p-4">
-        <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+        <h3 className="font-semibold text-foreground truncate group-hover:text-primary group-focus:text-primary transition-colors">
           {channel.name}
         </h3>
         

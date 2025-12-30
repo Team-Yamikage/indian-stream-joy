@@ -20,7 +20,9 @@ import {
 import { ChannelWithStream } from "@/types/channel";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useWatchHistory } from "@/hooks/useWatchHistory";
-import { Tv, AlertCircle, Heart, History, Trash2 } from "lucide-react";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { useTVNavigation } from "@/hooks/useTVNavigation";
+import { Tv, AlertCircle, Heart, History, Trash2, Loader2 } from "lucide-react";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -34,6 +36,9 @@ const Index = () => {
   
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
   const { history, addToHistory, clearHistory, getRecentChannelIds } = useWatchHistory();
+
+  // Enable TV remote D-pad navigation
+  useTVNavigation();
 
   const {
     data: channels = [],
@@ -75,6 +80,18 @@ const Index = () => {
     }
     return result;
   }, [channels, activeCategory, searchQuery, showFavoritesOnly, showHistoryOnly, favorites, recentChannelIds]);
+
+  // Infinite scroll for performance
+  const {
+    displayedItems: displayedChannels,
+    hasMore,
+    isLoadingMore,
+    loadMoreRef,
+  } = useInfiniteScroll({
+    items: filteredChannels,
+    batchSize: 20,
+    threshold: 400,
+  });
 
   const handleExplore = () => {
     channelsRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -163,7 +180,8 @@ const Index = () => {
                       setShowFavoritesOnly(!showFavoritesOnly);
                       setShowHistoryOnly(false);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap ${
+                    tabIndex={0}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary ${
                       showFavoritesOnly
                         ? "bg-red-500 border-red-500 text-white"
                         : "border-border bg-card/50 text-muted-foreground hover:border-red-500 hover:text-red-500"
@@ -184,7 +202,8 @@ const Index = () => {
                       setShowHistoryOnly(!showHistoryOnly);
                       setShowFavoritesOnly(false);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap ${
+                    tabIndex={0}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary ${
                       showHistoryOnly
                         ? "bg-primary border-primary text-primary-foreground"
                         : "border-border bg-card/50 text-muted-foreground hover:border-primary hover:text-primary"
@@ -213,13 +232,14 @@ const Index = () => {
                 <div className="flex items-center gap-2">
                   <Tv className="w-5 h-5 text-primary" />
                   <span className="text-muted-foreground">
-                    {filteredChannels.length} channel{filteredChannels.length !== 1 ? "s" : ""} available
+                    {displayedChannels.length} of {filteredChannels.length} channel{filteredChannels.length !== 1 ? "s" : ""}
                   </span>
                 </div>
                 {showHistoryOnly && history.length > 0 && (
                   <button
                     onClick={clearHistory}
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive transition-colors"
+                    tabIndex={0}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive transition-colors focus:outline-none focus:ring-2 focus:ring-primary rounded px-2 py-1"
                   >
                     <Trash2 className="w-4 h-4" />
                     Clear History
@@ -280,26 +300,40 @@ const Index = () => {
                 </div>
               )}
 
-              {/* Channels Grid */}
+              {/* Channels Grid with Infinite Scroll */}
               {!channelsLoading && !channelsError && filteredChannels.length > 0 && (
-                <motion.div
-                  layout
-                  className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
-                >
-                  <AnimatePresence mode="popLayout">
-                    {filteredChannels.map((channel, index) => (
-                      <ChannelCard
-                        key={channel.id}
-                        channel={channel}
-                        index={index}
-                        onPlay={handlePlayChannel}
-                        isFavorite={isFavorite(channel.id)}
-                        onToggleFavorite={toggleFavorite}
-                        onViewDetails={handleViewDetails}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
+                <>
+                  <motion.div
+                    layout
+                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+                  >
+                    <AnimatePresence mode="popLayout">
+                      {displayedChannels.map((channel, index) => (
+                        <ChannelCard
+                          key={channel.id}
+                          channel={channel}
+                          index={index}
+                          onPlay={handlePlayChannel}
+                          isFavorite={isFavorite(channel.id)}
+                          onToggleFavorite={toggleFavorite}
+                          onViewDetails={handleViewDetails}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+
+                  {/* Load More Trigger */}
+                  {hasMore && (
+                    <div ref={loadMoreRef} className="flex justify-center py-8">
+                      {isLoadingMore && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Loading more channels...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
