@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Helmet } from "react-helmet-async";
+import { toast } from "sonner";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
@@ -98,6 +99,33 @@ const Index = () => {
   };
 
   const handlePlayChannel = (channel: ChannelWithStream) => {
+    const streamUrl = channel.stream?.url;
+
+    // Some streams are HTTP-only; those will be blocked on HTTPS sites (like Vercel).
+    if (streamUrl && streamUrl.startsWith("http://")) {
+      toast.error("This stream uses insecure HTTP and is blocked on secure sites.", {
+        description: "Opening the stream in a new tab may work on some devices.",
+        action: {
+          label: "Open",
+          onClick: () => window.open(streamUrl, "_blank", "noopener,noreferrer"),
+        },
+      });
+      return;
+    }
+
+    // Streams that require custom headers (referrer/user-agent) often won't work in browsers.
+    if (channel.stream?.referrer || channel.stream?.user_agent) {
+      toast.message("This channel may require an external player.", {
+        description: "Some providers require special headers that TV browsers ignore.",
+        action: streamUrl
+          ? {
+              label: "Open",
+              onClick: () => window.open(streamUrl, "_blank", "noopener,noreferrer"),
+            }
+          : undefined,
+      });
+    }
+
     addToHistory(channel.id);
     setSelectedChannel(channel);
   };
@@ -309,15 +337,23 @@ const Index = () => {
                   >
                     <AnimatePresence mode="popLayout">
                       {displayedChannels.map((channel, index) => (
-                        <ChannelCard
+                        <motion.div
                           key={channel.id}
-                          channel={channel}
-                          index={index}
-                          onPlay={handlePlayChannel}
-                          isFavorite={isFavorite(channel.id)}
-                          onToggleFavorite={toggleFavorite}
-                          onViewDetails={handleViewDetails}
-                        />
+                          layout
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 12 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <ChannelCard
+                            channel={channel}
+                            index={index}
+                            onPlay={handlePlayChannel}
+                            isFavorite={isFavorite(channel.id)}
+                            onToggleFavorite={toggleFavorite}
+                            onViewDetails={handleViewDetails}
+                          />
+                        </motion.div>
                       ))}
                     </AnimatePresence>
                   </motion.div>

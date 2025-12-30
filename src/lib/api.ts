@@ -26,19 +26,37 @@ export async function fetchChannelsWithStreams(): Promise<ChannelWithStream[]> {
     fetchStreams(),
   ]);
 
-  const streamMap = new Map<string, Stream>();
-  streams.forEach((stream) => {
-    if (stream.channel && !streamMap.has(stream.channel)) {
-      streamMap.set(stream.channel, stream);
-    }
-  });
+  const streamsByChannel = new Map<string, Stream[]>();
+  for (const s of streams) {
+    if (!s.channel) continue;
+    const list = streamsByChannel.get(s.channel) ?? [];
+    list.push(s);
+    streamsByChannel.set(s.channel, list);
+  }
+
+  const scoreStream = (s: Stream) => {
+    // Prefer HTTPS (works on Vercel HTTPS)
+    const httpsScore = s.url.startsWith("https://") ? 100 : 0;
+    // Prefer HLS playlists
+    const hlsScore = s.url.toLowerCase().includes(".m3u8") ? 50 : 0;
+    // Penalize streams that require referrer/user-agent headers (often fail in browsers)
+    const headerPenalty = s.referrer || s.user_agent ? -40 : 0;
+    return httpsScore + hlsScore + headerPenalty;
+  };
 
   return channels
-    .map((channel) => ({
-      ...channel,
-      stream: streamMap.get(channel.id),
-    }))
-    .filter((channel) => channel.stream);
+    .map((channel) => {
+      const channelStreams = streamsByChannel.get(channel.id) ?? [];
+      const best = channelStreams
+        .slice()
+        .sort((a, b) => scoreStream(b) - scoreStream(a))[0];
+
+      return {
+        ...channel,
+        stream: best,
+      };
+    })
+    .filter((channel) => Boolean(channel.stream));
 }
 
 export function getChannelsByCategory(
