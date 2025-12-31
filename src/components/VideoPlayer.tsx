@@ -2,11 +2,15 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
 import { AlertCircle, Loader2, PictureInPicture2, X, Volume2, VolumeX, Maximize, Play, Pause, RotateCcw } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { ExternalPlayerButton } from "./ExternalPlayerButton";
+import { Stream } from "@/types/channel";
 
 interface VideoPlayerProps {
   url: string;
   title: string;
   onClose: () => void;
+  stream?: Stream;
+  onError?: () => void;
 }
 
 type ErrorType = "unavailable" | "unsupported" | "network" | "generic";
@@ -17,7 +21,7 @@ interface StreamError {
   details?: string;
 }
 
-export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
+export function VideoPlayer({ url, title, onClose, stream, onError }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -118,6 +122,7 @@ export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
               } else {
                 setError(getErrorMessage("network"));
                 setLoading(false);
+                onError?.();
               }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -128,11 +133,13 @@ export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
               } else {
                 setError(getErrorMessage("unsupported"));
                 setLoading(false);
+                onError?.();
               }
               break;
             default:
               setError(getErrorMessage("unavailable"));
               setLoading(false);
+              onError?.();
               hls.destroy();
               break;
           }
@@ -283,6 +290,9 @@ export function VideoPlayer({ url, title, onClose }: VideoPlayerProps) {
                 <kbd className="px-1.5 py-0.5 rounded bg-secondary text-foreground ml-2">M</kbd>
                 <span>Mute</span>
               </div>
+              
+              {/* External Player Button */}
+              {stream && <ExternalPlayerButton stream={stream} />}
               
               <button
                 onClick={toggleMute}

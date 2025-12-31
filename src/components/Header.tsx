@@ -1,10 +1,15 @@
 import { motion } from "framer-motion";
-import { History, Menu, X } from "lucide-react";
+import { History, Menu, X, Monitor, Tv } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import logo from "@/assets/logo.png";
 
-export function Header() {
+interface HeaderProps {
+  isTVMode?: boolean;
+  onToggleTVMode?: () => void;
+}
+
+export function Header({ isTVMode, onToggleTVMode }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -67,29 +72,48 @@ export function Header() {
             </Link>
           </nav>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            tabIndex={0}
-            className="md:hidden p-2 rounded-lg hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Toggle menu"
-          >
-            {mobileMenuOpen ? (
-              <X className="w-5 h-5 text-foreground" />
-            ) : (
-              <Menu className="w-5 h-5 text-foreground" />
+          <div className="flex items-center gap-2">
+            {/* TV Mode Toggle */}
+            {onToggleTVMode && (
+              <button
+                onClick={onToggleTVMode}
+                tabIndex={0}
+                className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-primary ${
+                  isTVMode
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+                title={isTVMode ? "Switch to Desktop Mode" : "Switch to TV Mode"}
+              >
+                {isTVMode ? <Tv className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+                <span className="text-xs font-medium">{isTVMode ? "TV" : "Desktop"}</span>
+              </button>
             )}
-          </button>
 
-          {/* Live indicator */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-indian-green/20"
-          >
-            <span className="w-2 h-2 rounded-full bg-indian-green animate-pulse" />
-            <span className="text-xs font-medium text-indian-green">LIVE</span>
-          </motion.div>
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              tabIndex={0}
+              className="md:hidden p-2 rounded-lg hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5 text-foreground" />
+              ) : (
+                <Menu className="w-5 h-5 text-foreground" />
+              )}
+            </button>
+
+            {/* Live indicator */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-indian-green/20"
+            >
+              <span className="w-2 h-2 rounded-full bg-indian-green animate-pulse" />
+              <span className="text-xs font-medium text-indian-green">LIVE</span>
+            </motion.div>
+          </div>
         </div>
 
         {/* Mobile Nav */}
@@ -133,6 +157,23 @@ export function Header() {
                 <History className="w-4 h-4" />
                 History
               </Link>
+              {onToggleTVMode && (
+                <button
+                  onClick={() => {
+                    onToggleTVMode();
+                    setMobileMenuOpen(false);
+                  }}
+                  tabIndex={0}
+                  className={`text-sm font-medium py-2 px-3 rounded-lg flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary ${
+                    isTVMode
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {isTVMode ? <Tv className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+                  {isTVMode ? "TV Mode (On)" : "TV Mode (Off)"}
+                </button>
+              )}
             </div>
           </motion.nav>
         )}

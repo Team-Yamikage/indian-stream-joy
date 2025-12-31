@@ -9,6 +9,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { ChannelCard } from "@/components/ChannelCard";
+import { TVChannelCard } from "@/components/TVChannelCard";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Footer } from "@/components/Footer";
@@ -23,7 +24,9 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useWatchHistory } from "@/hooks/useWatchHistory";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useTVNavigation } from "@/hooks/useTVNavigation";
-import { Tv, AlertCircle, Heart, History, Trash2, Loader2 } from "lucide-react";
+import { useTVMode } from "@/hooks/useTVMode";
+import { useStreamCheck } from "@/hooks/useStreamCheck";
+import { Tv, AlertCircle, Heart, History, Trash2, Loader2, EyeOff, Eye, ExternalLink, Copy } from "lucide-react";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -37,6 +40,8 @@ const Index = () => {
   
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
   const { history, addToHistory, clearHistory, getRecentChannelIds } = useWatchHistory();
+  const { isTVMode, toggleTVMode } = useTVMode();
+  const { recordFailure, isHidden, hiddenCount, showHidden, setShowHidden } = useStreamCheck();
 
   // Enable TV remote D-pad navigation
   useTVNavigation();
@@ -62,11 +67,16 @@ const Index = () => {
   const filteredChannels = useMemo(() => {
     let result = channels;
     
+    // Filter out hidden channels unless showHidden is true
+    if (!showHidden) {
+      result = result.filter((ch) => !isHidden(ch.id));
+    }
+    
     // Filter by watch history
     if (showHistoryOnly) {
       result = recentChannelIds
         .map((id) => channels.find((c) => c.id === id))
-        .filter((c): c is ChannelWithStream => c !== undefined);
+        .filter((c): c is ChannelWithStream => c !== undefined && (showHidden || !isHidden(c.id)));
     }
     // Filter favorites
     else if (showFavoritesOnly) {
@@ -80,9 +90,9 @@ const Index = () => {
       result = searchChannels(result, searchQuery);
     }
     return result;
-  }, [channels, activeCategory, searchQuery, showFavoritesOnly, showHistoryOnly, favorites, recentChannelIds]);
+  }, [channels, activeCategory, searchQuery, showFavoritesOnly, showHistoryOnly, favorites, recentChannelIds, showHidden, isHidden]);
 
-  // Infinite scroll for performance
+  // Infinite scroll for performance - use larger batches for TV mode
   const {
     displayedItems: displayedChannels,
     hasMore,
@@ -90,7 +100,7 @@ const Index = () => {
     loadMoreRef,
   } = useInfiniteScroll({
     items: filteredChannels,
-    batchSize: 20,
+    batchSize: isTVMode ? 12 : 20,
     threshold: 400,
   });
 
@@ -101,33 +111,41 @@ const Index = () => {
   const handlePlayChannel = (channel: ChannelWithStream) => {
     const streamUrl = channel.stream?.url;
 
-    // Some streams are HTTP-only; those will be blocked on HTTPS sites (like Vercel).
+    // Handle HTTP-only streams
     if (streamUrl && streamUrl.startsWith("http://")) {
-      toast.error("This stream uses insecure HTTP and is blocked on secure sites.", {
-        description: "Opening the stream in a new tab may work on some devices.",
+      toast.error("This stream uses insecure HTTP", {
+        description: "Secure sites block HTTP streams. Use the external player option below.",
         action: {
-          label: "Open",
-          onClick: () => window.open(streamUrl, "_blank", "noopener,noreferrer"),
+          label: "Copy URL",
+          onClick: async () => {
+            try {
+              await navigator.clipboard.writeText(streamUrl);
+              toast.success("Stream URL copied! Paste in VLC or external player.");
+            } catch {
+              window.open(streamUrl, "_blank", "noopener,noreferrer");
+            }
+          },
         },
+        duration: 8000,
       });
       return;
     }
 
-    // Streams that require custom headers (referrer/user-agent) often won't work in browsers.
+    // Warn about streams requiring headers
     if (channel.stream?.referrer || channel.stream?.user_agent) {
-      toast.message("This channel may require an external player.", {
-        description: "Some providers require special headers that TV browsers ignore.",
-        action: streamUrl
-          ? {
-              label: "Open",
-              onClick: () => window.open(streamUrl, "_blank", "noopener,noreferrer"),
-            }
-          : undefined,
+      toast.message("This channel may require an external player", {
+        description: "Click External Player in the video controls to copy the URL with headers.",
       });
     }
 
     addToHistory(channel.id);
     setSelectedChannel(channel);
+  };
+
+  const handleStreamError = () => {
+    if (selectedChannel) {
+      recordFailure(selectedChannel.id);
+    }
   };
 
   const handleClosePlayer = () => {
@@ -149,6 +167,11 @@ const Index = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedChannel]);
 
+  // Grid classes based on TV mode
+  const gridClasses = isTVMode
+    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+    : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4";
+
   return (
     <>
       <Helmet>
@@ -160,8 +183,8 @@ const Index = () => {
         <meta name="keywords" content="Indian TV, live streaming, IPTV, Indian channels, free TV, news, entertainment, sports" />
       </Helmet>
 
-      <div className="min-h-screen bg-background">
-        <Header />
+      <div className={`min-h-screen bg-background ${isTVMode ? "tv-mode" : ""}`}>
+        <Header isTVMode={isTVMode} onToggleTVMode={toggleTVMode} />
         
         <main>
           {/* Hero Section */}
@@ -176,12 +199,12 @@ const Index = () => {
             <div className="container mx-auto">
               {/* Section Header */}
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={isTVMode ? false : { opacity: 0, y: 20 }}
+                whileInView={isTVMode ? {} : { opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 className="text-center mb-12"
               >
-                <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+                <h2 className={`font-bold text-foreground mb-4 ${isTVMode ? "text-4xl md:text-5xl" : "text-3xl md:text-4xl"}`}>
                   {showHistoryOnly ? (
                     <>Watch <span className="text-gradient-saffron">History</span></>
                   ) : showFavoritesOnly ? (
@@ -190,12 +213,12 @@ const Index = () => {
                     <>Browse <span className="text-gradient-saffron">Channels</span></>
                   )}
                 </h2>
-                <p className="text-muted-foreground max-w-lg mx-auto">
+                <p className={`text-muted-foreground max-w-lg mx-auto ${isTVMode ? "text-lg" : ""}`}>
                   {showHistoryOnly
                     ? "Your recently watched channels."
                     : showFavoritesOnly
                     ? "Your saved favorite channels."
-                    : "Discover and watch your favorite Indian TV channels. Filter by category or search for specific channels."}
+                    : "Discover and watch your favorite Indian TV channels."}
                 </p>
               </motion.div>
 
@@ -247,6 +270,25 @@ const Index = () => {
                       </span>
                     )}
                   </button>
+                  
+                  {/* Show Hidden Toggle */}
+                  {hiddenCount > 0 && (
+                    <button
+                      onClick={() => setShowHidden(!showHidden)}
+                      tabIndex={0}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-full border transition-all duration-300 whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary ${
+                        showHidden
+                          ? "bg-amber-500 border-amber-500 text-white"
+                          : "border-border bg-card/50 text-muted-foreground hover:border-amber-500 hover:text-amber-500"
+                      }`}
+                    >
+                      {showHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      <span className="hidden sm:inline">{showHidden ? "Showing" : "Hidden"}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400">
+                        {hiddenCount}
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <CategoryFilter
                   categories={categories}
@@ -331,32 +373,46 @@ const Index = () => {
               {/* Channels Grid with Infinite Scroll */}
               {!channelsLoading && !channelsError && filteredChannels.length > 0 && (
                 <>
-                  <motion.div
-                    layout
-                    className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
-                  >
-                    <AnimatePresence mode="popLayout">
-                      {displayedChannels.map((channel, index) => (
-                        <motion.div
+                  {isTVMode ? (
+                    // TV Mode - simpler layout, no framer-motion animations
+                    <div className={gridClasses}>
+                      {displayedChannels.map((channel) => (
+                        <TVChannelCard
                           key={channel.id}
-                          layout
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 12 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <ChannelCard
-                            channel={channel}
-                            index={index}
-                            onPlay={handlePlayChannel}
-                            isFavorite={isFavorite(channel.id)}
-                            onToggleFavorite={toggleFavorite}
-                            onViewDetails={handleViewDetails}
-                          />
-                        </motion.div>
+                          channel={channel}
+                          onPlay={handlePlayChannel}
+                          isFavorite={isFavorite(channel.id)}
+                          onToggleFavorite={toggleFavorite}
+                          isHidden={isHidden(channel.id)}
+                        />
                       ))}
-                    </AnimatePresence>
-                  </motion.div>
+                    </div>
+                  ) : (
+                    // Desktop Mode - with animations
+                    <motion.div layout className={gridClasses}>
+                      <AnimatePresence mode="popLayout">
+                        {displayedChannels.map((channel, index) => (
+                          <motion.div
+                            key={channel.id}
+                            layout
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 12 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <ChannelCard
+                              channel={channel}
+                              index={index}
+                              onPlay={handlePlayChannel}
+                              isFavorite={isFavorite(channel.id)}
+                              onToggleFavorite={toggleFavorite}
+                              onViewDetails={handleViewDetails}
+                            />
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
 
                   {/* Load More Trigger */}
                   {hasMore && (
@@ -383,7 +439,9 @@ const Index = () => {
             <VideoPlayer
               url={selectedChannel.stream.url}
               title={selectedChannel.name}
+              stream={selectedChannel.stream}
               onClose={handleClosePlayer}
+              onError={handleStreamError}
             />
           )}
         </AnimatePresence>
