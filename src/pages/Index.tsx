@@ -1,16 +1,14 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Helmet } from "react-helmet-async";
-import { toast } from "sonner";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { ChannelCard } from "@/components/ChannelCard";
 import { TVChannelCard } from "@/components/TVChannelCard";
-import { VideoPlayer } from "@/components/VideoPlayer";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Footer } from "@/components/Footer";
 import {
@@ -26,7 +24,7 @@ import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useTVNavigation } from "@/hooks/useTVNavigation";
 import { useTVMode } from "@/hooks/useTVMode";
 import { useStreamCheck } from "@/hooks/useStreamCheck";
-import { Tv, AlertCircle, Heart, History, Trash2, Loader2, EyeOff, Eye, ExternalLink, Copy } from "lucide-react";
+import { Tv, AlertCircle, Heart, History, Trash2, Loader2, EyeOff, Eye } from "lucide-react";
 
 const Index = () => {
   const [searchParams] = useSearchParams();
@@ -35,13 +33,12 @@ const Index = () => {
   const [activeCategory, setActiveCategory] = useState("all");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [showHistoryOnly, setShowHistoryOnly] = useState(searchParams.get("history") === "true");
-  const [selectedChannel, setSelectedChannel] = useState<ChannelWithStream | null>(null);
   const channelsRef = useRef<HTMLDivElement>(null);
   
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
   const { history, addToHistory, clearHistory, getRecentChannelIds } = useWatchHistory();
   const { isTVMode, toggleTVMode } = useTVMode();
-  const { recordFailure, isHidden, hiddenCount, showHidden, setShowHidden } = useStreamCheck();
+  const { isHidden, hiddenCount, showHidden, setShowHidden } = useStreamCheck();
 
   // Enable TV remote D-pad navigation
   useTVNavigation();
@@ -92,7 +89,7 @@ const Index = () => {
     return result;
   }, [channels, activeCategory, searchQuery, showFavoritesOnly, showHistoryOnly, favorites, recentChannelIds, showHidden, isHidden]);
 
-  // Infinite scroll for performance - use larger batches for TV mode
+  // Infinite scroll for performance
   const {
     displayedItems: displayedChannels,
     hasMore,
@@ -108,64 +105,15 @@ const Index = () => {
     channelsRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Navigate to watch page instead of popup
   const handlePlayChannel = (channel: ChannelWithStream) => {
-    const streamUrl = channel.stream?.url;
-
-    // Handle HTTP-only streams
-    if (streamUrl && streamUrl.startsWith("http://")) {
-      toast.error("This stream uses insecure HTTP", {
-        description: "Secure sites block HTTP streams. Use the external player option below.",
-        action: {
-          label: "Copy URL",
-          onClick: async () => {
-            try {
-              await navigator.clipboard.writeText(streamUrl);
-              toast.success("Stream URL copied! Paste in VLC or external player.");
-            } catch {
-              window.open(streamUrl, "_blank", "noopener,noreferrer");
-            }
-          },
-        },
-        duration: 8000,
-      });
-      return;
-    }
-
-    // Warn about streams requiring headers
-    if (channel.stream?.referrer || channel.stream?.user_agent) {
-      toast.message("This channel may require an external player", {
-        description: "Click External Player in the video controls to copy the URL with headers.",
-      });
-    }
-
     addToHistory(channel.id);
-    setSelectedChannel(channel);
-  };
-
-  const handleStreamError = () => {
-    if (selectedChannel) {
-      recordFailure(selectedChannel.id);
-    }
-  };
-
-  const handleClosePlayer = () => {
-    setSelectedChannel(null);
+    navigate(`/watch/${channel.id}`);
   };
 
   const handleViewDetails = (channelId: string) => {
     navigate(`/channel/${channelId}`);
   };
-
-  // Escape key to close player
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && selectedChannel) {
-        handleClosePlayer();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedChannel]);
 
   // Grid classes based on TV mode
   const gridClasses = isTVMode
@@ -374,7 +322,6 @@ const Index = () => {
               {!channelsLoading && !channelsError && filteredChannels.length > 0 && (
                 <>
                   {isTVMode ? (
-                    // TV Mode - simpler layout, no framer-motion animations
                     <div className={gridClasses}>
                       {displayedChannels.map((channel) => (
                         <TVChannelCard
@@ -388,7 +335,6 @@ const Index = () => {
                       ))}
                     </div>
                   ) : (
-                    // Desktop Mode - with animations
                     <motion.div layout className={gridClasses}>
                       <AnimatePresence mode="popLayout">
                         {displayedChannels.map((channel, index) => (
@@ -432,19 +378,6 @@ const Index = () => {
         </main>
 
         <Footer />
-
-        {/* Video Player Modal */}
-        <AnimatePresence>
-          {selectedChannel && selectedChannel.stream && (
-            <VideoPlayer
-              url={selectedChannel.stream.url}
-              title={selectedChannel.name}
-              stream={selectedChannel.stream}
-              onClose={handleClosePlayer}
-              onError={handleStreamError}
-            />
-          )}
-        </AnimatePresence>
       </div>
     </>
   );
