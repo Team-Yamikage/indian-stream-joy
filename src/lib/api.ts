@@ -1,18 +1,53 @@
-import { Channel, Stream, Category, ChannelWithStream } from "@/types/channel";
+import { ChannelWithStream, Category } from "@/types/channel";
+import { parseM3U, M3UChannel } from "./m3u-parser";
 
-const CHANNELS_API = "https://iptv-org.github.io/api/channels.json";
-const STREAMS_API = "https://iptv-org.github.io/api/streams.json";
+const INDIA_M3U_URL = "https://iptv-org.github.io/iptv/countries/in.m3u";
 const CATEGORIES_API = "https://iptv-org.github.io/api/categories.json";
 
-export async function fetchIndianChannels(): Promise<Channel[]> {
-  const response = await fetch(CHANNELS_API);
-  const channels: Channel[] = await response.json();
-  return channels.filter((channel) => channel.country === "IN" && !channel.closed && !channel.is_nsfw);
+// Convert M3UChannel to ChannelWithStream format
+function m3uToChannelWithStream(m3u: M3UChannel): ChannelWithStream {
+  // Extract category from group
+  const categories: string[] = [];
+  if (m3u.group) {
+    // Group might be like "News" or "Entertainment;Movies"
+    const groups = m3u.group.split(/[;,]/).map((g) => g.trim().toLowerCase());
+    categories.push(...groups);
+  }
+
+  return {
+    id: m3u.id,
+    name: m3u.name,
+    alt_names: [],
+    network: m3u.group || null,
+    owners: [],
+    country: m3u.country || "IN",
+    categories,
+    is_nsfw: false,
+    launched: null,
+    closed: null,
+    replaced_by: null,
+    website: null,
+    logoUrl: m3u.logo || undefined,
+    stream: {
+      channel: m3u.id,
+      feed: null,
+      title: m3u.name,
+      url: m3u.url,
+      referrer: null,
+      user_agent: null,
+      quality: null,
+    },
+  };
 }
 
-export async function fetchStreams(): Promise<Stream[]> {
-  const response = await fetch(STREAMS_API);
-  return response.json();
+export async function fetchChannelsWithStreams(): Promise<ChannelWithStream[]> {
+  const response = await fetch(INDIA_M3U_URL);
+  const content = await response.text();
+  
+  const m3uChannels = parseM3U(content);
+  
+  // Convert to ChannelWithStream format
+  return m3uChannels.map(m3uToChannelWithStream);
 }
 
 export async function fetchCategories(): Promise<Category[]> {
@@ -20,51 +55,15 @@ export async function fetchCategories(): Promise<Category[]> {
   return response.json();
 }
 
-export async function fetchChannelsWithStreams(): Promise<ChannelWithStream[]> {
-  const [channels, streams] = await Promise.all([
-    fetchIndianChannels(),
-    fetchStreams(),
-  ]);
-
-  const streamsByChannel = new Map<string, Stream[]>();
-  for (const s of streams) {
-    if (!s.channel) continue;
-    const list = streamsByChannel.get(s.channel) ?? [];
-    list.push(s);
-    streamsByChannel.set(s.channel, list);
-  }
-
-  const scoreStream = (s: Stream) => {
-    // Prefer HTTPS (works on Vercel HTTPS)
-    const httpsScore = s.url.startsWith("https://") ? 100 : 0;
-    // Prefer HLS playlists
-    const hlsScore = s.url.toLowerCase().includes(".m3u8") ? 50 : 0;
-    // Penalize streams that require referrer/user-agent headers (often fail in browsers)
-    const headerPenalty = s.referrer || s.user_agent ? -40 : 0;
-    return httpsScore + hlsScore + headerPenalty;
-  };
-
-  return channels
-    .map((channel) => {
-      const channelStreams = streamsByChannel.get(channel.id) ?? [];
-      const best = channelStreams
-        .slice()
-        .sort((a, b) => scoreStream(b) - scoreStream(a))[0];
-
-      return {
-        ...channel,
-        stream: best,
-      };
-    })
-    .filter((channel) => Boolean(channel.stream));
-}
-
 export function getChannelsByCategory(
   channels: ChannelWithStream[],
   category: string
 ): ChannelWithStream[] {
   if (category === "all") return channels;
-  return channels.filter((channel) => channel.categories.includes(category));
+  const lowerCategory = category.toLowerCase();
+  return channels.filter((channel) => 
+    channel.categories.some((cat) => cat.toLowerCase() === lowerCategory)
+  );
 }
 
 export function searchChannels(
